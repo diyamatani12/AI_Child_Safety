@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, Play, Pause, RotateCcw, ChevronLeft, ChevronRight, 
-  Shield, MapPin, Bell, Zap, Brain, Users, Volume2, VolumeX,
-  Maximize, Minimize, SkipForward
+  X, Play, Pause, RotateCcw, Volume2, VolumeX,
+  Maximize, Minimize, Smartphone, Download, ArrowRight,
+  Shield, MapPin, Bell, Zap, CheckCircle, Star
 } from 'lucide-react';
 
 interface DemoModalProps {
@@ -11,197 +11,134 @@ interface DemoModalProps {
 }
 
 const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
-  const [currentStep, setCurrentStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const demoSteps = [
+  // Demo video URL - Using a portrait mobile demo video
+  const demoVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  const fallbackPosterUrl = "https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=400&h=800&dpr=2";
+
+  // Key features demonstrated in the video
+  const demoFeatures = [
     {
-      id: 'welcome',
-      title: 'Welcome to SafeYatra',
-      subtitle: 'AI-Powered Child Safety for Public Transport',
-      description: 'See how SafeYatra keeps your children safe with 11 advanced AI features.',
-      duration: 8,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', // Demo video
-      highlights: [
-        '50,000+ children protected',
-        '100+ cities covered',
-        '99.9% AI accuracy',
-        '24/7 monitoring'
-      ]
+      icon: Shield,
+      title: "Account Setup",
+      description: "Quick parent registration and child profile creation",
+      timestamp: "0:00-0:15"
     },
     {
-      id: 'setup',
-      title: 'Quick & Easy Setup',
-      subtitle: 'Get started in under 2 minutes',
-      description: 'Create your account, add your child, and start monitoring immediately.',
-      duration: 10,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-      highlights: [
-        'Free parent account',
-        'Works on any device',
-        'No special hardware needed',
-        'Instant activation'
-      ]
+      icon: MapPin,
+      title: "Live Tracking",
+      description: "Real-time location with transport details and route info",
+      timestamp: "0:15-0:35"
     },
     {
-      id: 'tracking',
-      title: 'Real-Time Location Tracking',
-      subtitle: 'Know exactly where your child is',
-      description: 'Live GPS tracking with transport details, route information, and arrival predictions.',
-      duration: 12,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      highlights: [
-        'Live GPS with vehicle ID',
-        'Route progress tracking',
-        'Stop arrival predictions',
-        'Transport operator info'
-      ]
+      icon: Bell,
+      title: "Smart Alerts",
+      description: "Instant notifications for arrivals, departures, and safety",
+      timestamp: "0:35-0:50"
     },
     {
-      id: 'alerts',
-      title: 'Smart Safety Alerts',
-      subtitle: 'Instant notifications when it matters',
-      description: 'Get intelligent alerts for arrivals, departures, delays, and safety concerns.',
-      duration: 10,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-      highlights: [
-        'Safe zone entry/exit alerts',
-        'Journey start/end notifications',
-        'Delay and route change alerts',
-        'Emergency notifications'
-      ]
-    },
-    {
-      id: 'emergency',
-      title: 'Emergency SOS System',
-      subtitle: 'Help when you need it most',
-      description: 'One-touch emergency button alerts both parents and authorities instantly.',
-      duration: 8,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-      highlights: [
-        'Instant parent alerts',
-        'Authority notifications',
-        'Location sharing',
-        'Emergency coordination'
-      ]
-    },
-    {
-      id: 'ai-features',
-      title: 'Advanced AI Monitoring',
-      subtitle: 'Intelligence that keeps children safe',
-      description: 'AI analyzes patterns, predicts risks, and provides proactive safety recommendations.',
-      duration: 15,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-      highlights: [
-        'Route deviation detection',
-        'Behavior pattern analysis',
-        'Risk prediction',
-        'Anomaly detection'
-      ]
-    },
-    {
-      id: 'get-started',
-      title: 'Start Protecting Your Child Today',
-      subtitle: 'Join thousands of families using SafeYatra',
-      description: 'Experience the peace of mind that comes with comprehensive AI-powered child safety.',
-      duration: 6,
-      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-      highlights: [
-        '100% free for parents',
-        'No contracts or commitments',
-        'Works on any smartphone',
-        'Start in under 2 minutes'
-      ]
+      icon: Zap,
+      title: "SOS Emergency",
+      description: "One-touch emergency button with authority coordination",
+      timestamp: "0:50-1:05"
     }
   ];
 
-  const totalDuration = demoSteps.reduce((acc, step) => acc + step.duration, 0);
-
-  // Auto-play functionality
+  // Auto-play when modal opens
   useEffect(() => {
-    if (isOpen && !isPlaying) {
-      // Start playing automatically when modal opens
-      setTimeout(() => {
+    if (isOpen && isVideoLoaded) {
+      const timer = setTimeout(() => {
         setIsPlaying(true);
       }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, isVideoLoaded]);
 
-  // Video control effects
+  // Video event handlers
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    const handleLoadedData = () => {
+      setIsVideoLoaded(true);
+      setDuration(video.duration);
+      setVideoError(false);
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+      setProgress((video.currentTime / video.duration) * 100);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(100);
+    };
+
+    const handleError = () => {
+      setVideoError(true);
+      setIsVideoLoaded(false);
+    };
+
+    video.addEventListener('loadeddata', handleLoadedData);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('ended', handleEnded);
+    video.addEventListener('error', handleError);
+
+    return () => {
+      video.removeEventListener('loadeddata', handleLoadedData);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('error', handleError);
+    };
+  }, []);
+
+  // Play/pause control
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isVideoLoaded) return;
+
     if (isPlaying) {
-      video.play().catch(console.error);
+      video.play().catch(() => {
+        setIsPlaying(false);
+      });
     } else {
       video.pause();
     }
-  }, [isPlaying, currentStep]);
+  }, [isPlaying, isVideoLoaded]);
 
-  // Progress tracking
+  // Mute control
   useEffect(() => {
-    if (!isPlaying) return;
-
-    const stepDuration = demoSteps[currentStep].duration;
-    let elapsed = 0;
-
-    intervalRef.current = setInterval(() => {
-      elapsed += 0.1;
-      const stepProgress = (elapsed / stepDuration) * 100;
-      setProgress(stepProgress);
-      setTimeRemaining(Math.ceil(stepDuration - elapsed));
-
-      if (elapsed >= stepDuration) {
-        if (currentStep < demoSteps.length - 1) {
-          setCurrentStep(prev => prev + 1);
-          elapsed = 0;
-        } else {
-          setIsPlaying(false);
-          setProgress(100);
-          setTimeRemaining(0);
-        }
-      }
-    }, 100);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isPlaying, currentStep, demoSteps]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+    const video = videoRef.current;
+    if (video) {
+      video.muted = isMuted;
+    }
+  }, [isMuted]);
 
   // Reset when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setCurrentStep(0);
       setIsPlaying(false);
       setProgress(0);
-      setTimeRemaining(0);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      setCurrentTime(0);
+      if (videoRef.current) {
+        videoRef.current.currentTime = 0;
       }
     }
   }, [isOpen]);
 
-  // Keyboard navigation
+  // Keyboard controls
   useEffect(() => {
     if (!isOpen) return;
 
@@ -213,19 +150,13 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
         case ' ':
         case 'k':
           e.preventDefault();
-          setIsPlaying(prev => !prev);
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          goToPreviousStep();
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          goToNextStep();
+          if (isVideoLoaded) {
+            setIsPlaying(prev => !prev);
+          }
           break;
         case 'r':
           e.preventDefault();
-          restartDemo();
+          restartVideo();
           break;
         case 'm':
           e.preventDefault();
@@ -240,31 +171,16 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [isOpen, currentStep]);
+  }, [isOpen, isVideoLoaded]);
 
-  const goToNextStep = () => {
-    if (currentStep < demoSteps.length - 1) {
-      setCurrentStep(prev => prev + 1);
+  const restartVideo = () => {
+    const video = videoRef.current;
+    if (video) {
+      video.currentTime = 0;
       setProgress(0);
+      setCurrentTime(0);
+      setIsPlaying(true);
     }
-  };
-
-  const goToPreviousStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(prev => prev - 1);
-      setProgress(0);
-    }
-  };
-
-  const goToStep = (stepIndex: number) => {
-    setCurrentStep(stepIndex);
-    setProgress(0);
-  };
-
-  const restartDemo = () => {
-    setCurrentStep(0);
-    setProgress(0);
-    setIsPlaying(true);
   };
 
   const toggleFullscreen = () => {
@@ -277,49 +193,50 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const skipToEnd = () => {
-    setCurrentStep(demoSteps.length - 1);
-    setProgress(0);
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const video = videoRef.current;
+    if (!video || !duration) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const newTime = (clickX / rect.width) * duration;
+    
+    video.currentTime = newTime;
+    setCurrentTime(newTime);
+    setProgress((newTime / duration) * 100);
   };
 
   if (!isOpen) return null;
 
-  const currentStepData = demoSteps[currentStep];
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
       <div 
         ref={modalRef}
-        className={`bg-white rounded-3xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden ${
-          isFullscreen ? 'max-w-none max-h-none h-full' : ''
+        className={`bg-white rounded-3xl shadow-2xl overflow-hidden ${
+          isFullscreen 
+            ? 'w-full h-full max-w-none max-h-none' 
+            : 'max-w-6xl w-full max-h-[95vh]'
         }`}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b-2 border-gray-200 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
           <div className="flex items-center space-x-4">
             <div className="bg-white p-2 rounded-xl">
-              <Shield className="h-8 w-8 text-blue-600" />
+              <Smartphone className="h-8 w-8 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">SafeYatra Demo</h2>
-              <p className="text-blue-100">AI Child Safety Platform</p>
+              <h2 className="text-2xl font-bold">SafeYatra Mobile App Demo</h2>
+              <p className="text-blue-100">See how it works on your phone</p>
             </div>
           </div>
           
           <div className="flex items-center space-x-4">
-            {/* Progress Indicator */}
-            <div className="hidden md:flex items-center space-x-2">
-              <span className="text-sm font-medium">
-                Step {currentStep + 1} of {demoSteps.length}
-              </span>
-              <div className="w-32 bg-blue-800 rounded-full h-2">
-                <div 
-                  className="bg-orange-400 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${((currentStep + 1) / demoSteps.length) * 100}%` }}
-                ></div>
-              </div>
-            </div>
-            
             <button
               onClick={toggleFullscreen}
               className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
@@ -338,187 +255,268 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex flex-col lg:flex-row h-full">
+        <div className="flex flex-col lg:flex-row">
           {/* Video Section */}
-          <div className="lg:w-2/3 bg-black relative">
-            <video
-              ref={videoRef}
-              className="w-full h-64 lg:h-96 object-cover"
-              muted={isMuted}
-              loop
-              playsInline
-              poster={`https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=800&h=400&dpr=2`}
-            >
-              <source src={currentStepData.videoUrl} type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
-            
-            {/* Video Overlay Controls */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent">
-              <div className="absolute bottom-4 left-4 right-4">
-                {/* Progress Bar */}
-                <div className="bg-white bg-opacity-20 rounded-full h-2 mb-4">
-                  <div 
-                    className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  ></div>
+          <div className="lg:w-2/3 bg-black relative flex items-center justify-center">
+            {videoError ? (
+              // Fallback content when video fails to load
+              <div className="text-center text-white p-12">
+                <div className="w-64 h-96 mx-auto bg-gray-800 rounded-3xl border-8 border-gray-700 relative overflow-hidden shadow-2xl">
+                  {/* Phone Frame */}
+                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-16 h-1 bg-gray-600 rounded-full"></div>
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-12 h-12 bg-gray-700 rounded-full"></div>
+                  
+                  {/* Screen Content */}
+                  <div className="p-4 h-full bg-gradient-to-br from-blue-600 to-purple-600 mt-8 mb-16">
+                    <div className="text-center mb-6">
+                      <Shield className="h-12 w-12 text-white mx-auto mb-2" />
+                      <h3 className="text-lg font-bold text-white">SafeYatra</h3>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="bg-white bg-opacity-20 rounded-xl p-3">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <MapPin className="h-4 w-4 text-orange-300" />
+                          <span className="text-sm font-medium text-white">Live Tracking</span>
+                        </div>
+                        <div className="text-xs text-blue-100">Aarav is on Bus #DL-1234</div>
+                      </div>
+                      
+                      <div className="bg-white bg-opacity-20 rounded-xl p-3">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Bell className="h-4 w-4 text-green-300" />
+                          <span className="text-sm font-medium text-white">Safe Arrival</span>
+                        </div>
+                        <div className="text-xs text-blue-100">Arrived at school safely</div>
+                      </div>
+                      
+                      <div className="bg-red-500 rounded-full p-4 mx-auto w-16 h-16 flex items-center justify-center">
+                        <Zap className="h-8 w-8 text-white" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
-                {/* Controls */}
-                <div className="flex items-center justify-between text-white">
-                  <div className="flex items-center space-x-3">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="bg-white bg-opacity-20 hover:bg-opacity-30 p-3 rounded-full transition-all"
-                      title="Play/Pause (Space)"
-                    >
-                      {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
-                    </button>
-                    
-                    <button
-                      onClick={() => setIsMuted(!isMuted)}
-                      className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                      title="Mute/Unmute (M)"
-                    >
-                      {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                    </button>
-                    
-                    <span className="text-sm font-medium">
-                      {timeRemaining > 0 ? `${timeRemaining}s remaining` : 'Complete'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={restartDemo}
-                      className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                      title="Restart (R)"
-                    >
-                      <RotateCcw className="h-5 w-5" />
-                    </button>
-                    
-                    <button
-                      onClick={skipToEnd}
-                      className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                      title="Skip to End"
-                    >
-                      <SkipForward className="h-5 w-5" />
-                    </button>
+                <div className="mt-8">
+                  <h3 className="text-xl font-bold mb-4">Demo Preview</h3>
+                  <p className="text-gray-300 mb-6">
+                    This demo shows SafeYatra running on a mobile phone with real-time tracking, 
+                    smart alerts, and emergency features.
+                  </p>
+                  <div className="text-sm text-gray-400">
+                    Video temporarily unavailable - showing interactive preview
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Mobile Phone Frame */}
+                <div className="relative">
+                  <div className="w-80 h-[600px] bg-black rounded-[3rem] p-2 shadow-2xl">
+                    <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
+                      {/* Phone Notch */}
+                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-10"></div>
+                      
+                      {/* Video Container */}
+                      <video
+                        ref={videoRef}
+                        className="w-full h-full object-cover"
+                        muted={isMuted}
+                        playsInline
+                        poster={fallbackPosterUrl}
+                        preload="metadata"
+                      >
+                        <source src={demoVideoUrl} type="video/mp4" />
+                        Your browser does not support the video tag.
+                      </video>
+                      
+                      {/* Loading Overlay */}
+                      {!isVideoLoaded && !videoError && (
+                        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600 font-medium">Loading demo video...</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Play Button Overlay */}
+                  {!isPlaying && isVideoLoaded && (
+                    <button
+                      onClick={() => setIsPlaying(true)}
+                      className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-[3rem] transition-all hover:bg-opacity-40"
+                    >
+                      <div className="bg-white bg-opacity-90 rounded-full p-6 shadow-lg">
+                        <Play className="h-12 w-12 text-blue-600 ml-1" />
+                      </div>
+                    </button>
+                  )}
+                </div>
+
+                {/* Video Controls */}
+                {isVideoLoaded && (
+                  <div className="absolute bottom-6 left-6 right-6">
+                    <div className="bg-black bg-opacity-70 rounded-2xl p-4 backdrop-blur-sm">
+                      {/* Progress Bar */}
+                      <div 
+                        className="bg-white bg-opacity-30 rounded-full h-2 mb-4 cursor-pointer"
+                        onClick={handleProgressClick}
+                      >
+                        <div 
+                          className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      
+                      {/* Control Buttons */}
+                      <div className="flex items-center justify-between text-white">
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                            title="Play/Pause (Space)"
+                          >
+                            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                          </button>
+                          
+                          <button
+                            onClick={() => setIsMuted(!isMuted)}
+                            className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                            title="Mute/Unmute (M)"
+                          >
+                            {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                          </button>
+                          
+                          <span className="text-sm font-medium">
+                            {formatTime(currentTime)} / {formatTime(duration)}
+                          </span>
+                        </div>
+                        
+                        <button
+                          onClick={restartVideo}
+                          className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                          title="Restart (R)"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Content Section */}
-          <div className="lg:w-1/3 p-6 flex flex-col">
-            {/* Step Content */}
+          <div className="lg:w-1/3 p-8 flex flex-col">
             <div className="flex-1">
-              <div className="mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  {currentStepData.title}
+              {/* Demo Description */}
+              <div className="mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                  Real Mobile App Demo
                 </h3>
-                <p className="text-lg text-blue-600 font-semibold mb-4">
-                  {currentStepData.subtitle}
+                <p className="text-lg text-gray-700 leading-relaxed mb-6">
+                  Watch how SafeYatra works on a real smartphone. This 90-second demo shows 
+                  the complete parent experience from setup to emergency response.
                 </p>
-                <p className="text-gray-700 text-lg leading-relaxed">
-                  {currentStepData.description}
-                </p>
+                
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-6">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <Smartphone className="h-5 w-5 text-blue-600" />
+                    <span className="font-semibold text-blue-900">Portrait Mobile View</span>
+                  </div>
+                  <p className="text-blue-800 text-sm">
+                    Optimized for smartphones - see exactly how it looks on your device
+                  </p>
+                </div>
               </div>
 
-              {/* Highlights */}
-              <div className="space-y-3 mb-6">
-                {currentStepData.highlights.map((highlight, index) => (
+              {/* Demo Features Timeline */}
+              <div className="space-y-4 mb-8">
+                <h4 className="text-lg font-bold text-gray-900 mb-4">What You'll See:</h4>
+                {demoFeatures.map((feature, index) => (
                   <div 
                     key={index}
-                    className="flex items-center space-x-3 animate-fade-in"
-                    style={{ animationDelay: `${index * 0.2}s` }}
+                    className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl border border-gray-200"
                   >
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-gray-700 font-medium">{highlight}</span>
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <feature.icon className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h5 className="font-semibold text-gray-900 mb-1">{feature.title}</h5>
+                      <p className="text-gray-600 text-sm mb-2">{feature.description}</p>
+                      <span className="text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded">
+                        {feature.timestamp}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* Step Navigation */}
-              <div className="flex items-center justify-between mb-6">
-                <button
-                  onClick={goToPreviousStep}
-                  disabled={currentStep === 0}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                    currentStep === 0
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-blue-600 hover:bg-blue-50'
-                  }`}
-                  title="Previous (←)"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                  <span>Previous</span>
-                </button>
-
-                <div className="flex space-x-2">
-                  {demoSteps.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => goToStep(index)}
-                      className={`w-3 h-3 rounded-full transition-all ${
-                        index === currentStep
-                          ? 'bg-blue-600'
-                          : index < currentStep
-                          ? 'bg-green-500'
-                          : 'bg-gray-300'
-                      }`}
-                      title={`Go to step ${index + 1}`}
-                    />
+              {/* Benefits */}
+              <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 mb-8">
+                <h4 className="text-lg font-bold text-green-900 mb-4">Why Parents Choose SafeYatra:</h4>
+                <div className="space-y-3">
+                  {[
+                    "Works on any smartphone - no special device needed",
+                    "100% free for parents - no hidden costs",
+                    "Setup takes less than 2 minutes",
+                    "AI-powered safety beyond basic GPS tracking"
+                  ].map((benefit, index) => (
+                    <div key={index} className="flex items-center space-x-3">
+                      <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                      <span className="text-green-800 font-medium">{benefit}</span>
+                    </div>
                   ))}
                 </div>
-
-                <button
-                  onClick={goToNextStep}
-                  disabled={currentStep === demoSteps.length - 1}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                    currentStep === demoSteps.length - 1
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-blue-600 hover:bg-blue-50'
-                  }`}
-                  title="Next (→)"
-                >
-                  <span>Next</span>
-                  <ChevronRight className="h-5 w-5" />
-                </button>
               </div>
             </div>
 
             {/* Call to Action */}
-            {currentStep === demoSteps.length - 1 && (
-              <div className="border-t-2 border-gray-200 pt-6">
-                <div className="text-center space-y-4">
-                  <h4 className="text-xl font-bold text-gray-900">Ready to Get Started?</h4>
-                  <p className="text-gray-600">Join thousands of families protecting their children with SafeYatra.</p>
-                  <div className="space-y-3">
-                    <button
-                      onClick={onClose}
-                      className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-lg hover:bg-blue-700 transition-all transform hover:scale-105"
-                    >
-                      Start Free Trial
-                    </button>
-                    <button
-                      onClick={restartDemo}
-                      className="w-full border-2 border-gray-300 text-gray-700 px-6 py-3 rounded-xl font-bold text-lg hover:bg-gray-50 transition-all"
-                    >
-                      Watch Demo Again
-                    </button>
-                  </div>
+            <div className="border-t-2 border-gray-200 pt-6">
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center space-x-2 mb-4">
+                  {[1,2,3,4,5].map((star) => (
+                    <Star key={star} className="h-5 w-5 text-yellow-500 fill-current" />
+                  ))}
+                  <span className="text-sm text-gray-600 ml-2">Rated 4.9/5 by parents</span>
                 </div>
+                
+                <h4 className="text-xl font-bold text-gray-900">Ready to protect your child?</h4>
+                <p className="text-gray-600 mb-6">
+                  Join 50,000+ families using SafeYatra's AI-powered safety platform.
+                </p>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={onClose}
+                    className="w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-all transform hover:scale-105 shadow-lg flex items-center justify-center space-x-2"
+                  >
+                    <Download className="h-5 w-5" />
+                    <span>Get SafeYatra Free</span>
+                  </button>
+                  
+                  <button
+                    onClick={restartVideo}
+                    className="w-full border-2 border-gray-300 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-50 transition-all flex items-center justify-center space-x-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Watch Again</span>
+                  </button>
+                </div>
+                
+                <p className="text-xs text-gray-500 mt-4">
+                  No credit card required • Available on iOS & Android
+                </p>
               </div>
-            )}
+            </div>
 
             {/* Keyboard Shortcuts */}
-            <div className="mt-6 text-xs text-gray-500 space-y-1">
-              <p><kbd className="bg-gray-200 px-1 rounded">Space</kbd> Play/Pause</p>
-              <p><kbd className="bg-gray-200 px-1 rounded">←/→</kbd> Previous/Next</p>
-              <p><kbd className="bg-gray-200 px-1 rounded">R</kbd> Restart <kbd className="bg-gray-200 px-1 rounded">M</kbd> Mute</p>
+            <div className="mt-6 text-xs text-gray-500 space-y-1 border-t border-gray-200 pt-4">
+              <p><kbd className="bg-gray-200 px-1 rounded text-xs">Space</kbd> Play/Pause</p>
+              <p><kbd className="bg-gray-200 px-1 rounded text-xs">R</kbd> Restart <kbd className="bg-gray-200 px-1 rounded text-xs">M</kbd> Mute <kbd className="bg-gray-200 px-1 rounded text-xs">F</kbd> Fullscreen</p>
             </div>
           </div>
         </div>

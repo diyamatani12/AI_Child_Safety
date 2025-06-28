@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Play, Pause, RotateCcw, Volume2, VolumeX,
   Maximize, Minimize, Smartphone, Download, ArrowRight,
-  Shield, MapPin, Bell, Zap, CheckCircle, Star, AlertCircle
+  Shield, MapPin, Bell, Zap, CheckCircle, Star, AlertCircle,
+  Loader, ExternalLink
 } from 'lucide-react';
 
 interface DemoModalProps {
@@ -12,7 +13,7 @@ interface DemoModalProps {
 
 const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // Start muted for autoplay
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -20,16 +21,30 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [showFallback, setShowFallback] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Using a working demo video - Sintel trailer in portrait format
-  const demoVideoUrl = "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4";
-  
-  // Fallback to YouTube embed if direct video fails
+  // Working demo video sources - multiple fallbacks
+  const videoSources = [
+    {
+      src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      type: "video/mp4"
+    },
+    {
+      src: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_2mb.mp4",
+      type: "video/mp4"
+    },
+    {
+      src: "https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4",
+      type: "video/mp4"
+    }
+  ];
+
+  // YouTube fallback for SafeYatra demo
   const youtubeEmbedId = "dQw4w9WgXcQ"; // Replace with actual SafeYatra demo video ID
-  const youtubeEmbedUrl = `https://www.youtube.com/embed/${youtubeEmbedId}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1`;
+  const youtubeEmbedUrl = `https://www.youtube.com/embed/${youtubeEmbedId}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1&playsinline=1`;
 
   // Key features demonstrated in the video
   const demoFeatures = [
@@ -61,21 +76,40 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
 
   // Auto-play when modal opens
   useEffect(() => {
-    if (isOpen && isVideoLoaded) {
+    if (isOpen && isVideoLoaded && !videoError) {
       const timer = setTimeout(() => {
         setIsPlaying(true);
-      }, 500);
+      }, 800);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, isVideoLoaded]);
+  }, [isOpen, isVideoLoaded, videoError]);
 
   // Video event handlers
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    let currentSourceIndex = 0;
+
+    const tryNextSource = () => {
+      currentSourceIndex++;
+      if (currentSourceIndex < videoSources.length) {
+        setLoadingProgress(0);
+        setVideoError(false);
+        video.src = videoSources[currentSourceIndex].src;
+        video.load();
+      } else {
+        // All sources failed, show fallback
+        setVideoError(true);
+        setShowFallback(true);
+        setIsVideoLoaded(false);
+        setLoadingProgress(0);
+      }
+    };
+
     const handleLoadStart = () => {
       setLoadingProgress(10);
+      setVideoError(false);
     };
 
     const handleProgress = () => {
@@ -83,7 +117,7 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
         const bufferedEnd = video.buffered.end(video.buffered.length - 1);
         const duration = video.duration;
         if (duration > 0) {
-          setLoadingProgress((bufferedEnd / duration) * 100);
+          setLoadingProgress(Math.min(90, (bufferedEnd / duration) * 100));
         }
       }
     };
@@ -92,15 +126,19 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
       setLoadingProgress(100);
       setIsVideoLoaded(true);
       setVideoError(false);
+      setShowFallback(false);
     };
 
     const handleLoadedData = () => {
       setDuration(video.duration);
+      setLoadingProgress(95);
     };
 
     const handleTimeUpdate = () => {
       setCurrentTime(video.currentTime);
-      setProgress((video.currentTime / video.duration) * 100);
+      if (video.duration > 0) {
+        setProgress((video.currentTime / video.duration) * 100);
+      }
     };
 
     const handleEnded = () => {
@@ -110,23 +148,33 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
 
     const handleError = (e: Event) => {
       console.error('Video error:', e);
-      setVideoError(true);
-      setIsVideoLoaded(false);
-      setLoadingProgress(0);
+      tryNextSource();
     };
 
     const handleWaiting = () => {
-      setIsVideoLoaded(false);
+      setLoadingProgress(Math.max(20, loadingProgress));
     };
 
     const handleCanPlayThrough = () => {
       setIsVideoLoaded(true);
+      setLoadingProgress(100);
     };
+
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+      setLoadingProgress(80);
+    };
+
+    // Set initial source
+    if (videoSources.length > 0) {
+      video.src = videoSources[0].src;
+    }
 
     video.addEventListener('loadstart', handleLoadStart);
     video.addEventListener('progress', handleProgress);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('loadeddata', handleLoadedData);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('error', handleError);
@@ -138,6 +186,7 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
       video.removeEventListener('progress', handleProgress);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('loadeddata', handleLoadedData);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
@@ -149,17 +198,24 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
   // Play/pause control
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !isVideoLoaded) return;
+    if (!video || !isVideoLoaded || videoError) return;
 
     if (isPlaying) {
-      video.play().catch((error) => {
-        console.error('Play failed:', error);
-        setIsPlaying(false);
-      });
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.error('Play failed:', error);
+          setIsPlaying(false);
+          // Try unmuting if autoplay failed due to browser policy
+          if (error.name === 'NotAllowedError') {
+            setIsMuted(false);
+          }
+        });
+      }
     } else {
       video.pause();
     }
-  }, [isPlaying, isVideoLoaded]);
+  }, [isPlaying, isVideoLoaded, videoError]);
 
   // Mute control
   useEffect(() => {
@@ -177,7 +233,9 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
       setCurrentTime(0);
       setIsVideoLoaded(false);
       setVideoError(false);
+      setShowFallback(false);
       setLoadingProgress(0);
+      setIsMuted(true);
       if (videoRef.current) {
         videoRef.current.currentTime = 0;
       }
@@ -196,7 +254,7 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
         case ' ':
         case 'k':
           e.preventDefault();
-          if (isVideoLoaded && !videoError) {
+          if ((isVideoLoaded && !videoError) || showFallback) {
             setIsPlaying(prev => !prev);
           }
           break;
@@ -217,9 +275,16 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [isOpen, isVideoLoaded, videoError]);
+  }, [isOpen, isVideoLoaded, videoError, showFallback]);
 
   const restartVideo = () => {
+    if (showFallback) {
+      // For YouTube iframe, we need to reload it
+      setShowFallback(false);
+      setTimeout(() => setShowFallback(true), 100);
+      return;
+    }
+
     const video = videoRef.current;
     if (video) {
       video.currentTime = 0;
@@ -246,6 +311,8 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (showFallback) return; // Can't control YouTube iframe progress
+
     const video = videoRef.current;
     if (!video || !duration) return;
 
@@ -259,15 +326,52 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
   };
 
   const renderPhoneDemo = () => {
-    if (videoError) {
-      return (
-        <div className="w-80 h-[600px] bg-gradient-to-br from-gray-800 to-gray-900 rounded-[3rem] p-2 shadow-2xl">
-          <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
-            {/* Phone Notch */}
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-10"></div>
-            
-            {/* YouTube Embed Fallback */}
-            <div className="w-full h-full">
+    return (
+      <div className="w-80 h-[600px] bg-gradient-to-br from-gray-800 to-gray-900 rounded-[3rem] p-2 shadow-2xl">
+        <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
+          {/* Phone Notch */}
+          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-20"></div>
+          
+          {/* Video Container */}
+          {!showFallback ? (
+            <>
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                muted={isMuted}
+                playsInline
+                preload="auto"
+                crossOrigin="anonymous"
+                style={{ objectPosition: 'center' }}
+              >
+                {videoSources.map((source, index) => (
+                  <source key={index} src={source.src} type={source.type} />
+                ))}
+                <p className="text-center p-8 text-gray-600">
+                  Your browser does not support the video tag.
+                </p>
+              </video>
+              
+              {/* Loading Overlay */}
+              {(!isVideoLoaded && !videoError) && (
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center z-10">
+                  <div className="text-center text-white">
+                    <Loader className="w-16 h-16 text-white animate-spin mx-auto mb-4" />
+                    <p className="font-semibold mb-2">Loading SafeYatra Demo</p>
+                    <div className="w-48 bg-white bg-opacity-30 rounded-full h-2 mx-auto">
+                      <div 
+                        className="bg-orange-400 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${loadingProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-sm text-blue-100 mt-2">{Math.round(loadingProgress)}% loaded</p>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* YouTube Embed Fallback */
+            <div className="w-full h-full relative">
               <iframe
                 src={youtubeEmbedUrl}
                 className="w-full h-full border-0"
@@ -275,55 +379,27 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
                 allowFullScreen
                 title="SafeYatra Demo Video"
               ></iframe>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-80 h-[600px] bg-gradient-to-br from-gray-800 to-gray-900 rounded-[3rem] p-2 shadow-2xl">
-        <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
-          {/* Phone Notch */}
-          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-10"></div>
-          
-          {/* Video Container */}
-          <video
-            ref={videoRef}
-            className="w-full h-full object-cover"
-            muted={isMuted}
-            playsInline
-            preload="auto"
-            crossOrigin="anonymous"
-          >
-            <source src={demoVideoUrl} type="video/mp4" />
-            <p className="text-center p-8 text-gray-600">
-              Your browser does not support the video tag.
-            </p>
-          </video>
-          
-          {/* Loading Overlay */}
-          {(!isVideoLoaded && !videoError) && (
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-              <div className="text-center text-white">
-                <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="font-semibold mb-2">Loading SafeYatra Demo</p>
-                <div className="w-48 bg-white bg-opacity-30 rounded-full h-2 mx-auto">
-                  <div 
-                    className="bg-orange-400 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${loadingProgress}%` }}
-                  ></div>
+              
+              {/* Fallback Notice */}
+              <div className="absolute top-8 left-4 right-4 z-10">
+                <div className="bg-blue-600 text-white rounded-xl p-3 shadow-lg">
+                  <div className="flex items-center space-x-2">
+                    <ExternalLink className="h-4 w-4 text-blue-200" />
+                    <div>
+                      <p className="font-semibold text-sm">Demo Video</p>
+                      <p className="text-xs text-blue-100">Showing sample content</p>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-sm text-blue-100 mt-2">{Math.round(loadingProgress)}% loaded</p>
               </div>
             </div>
           )}
           
           {/* Play Button Overlay */}
-          {!isPlaying && isVideoLoaded && !videoError && (
+          {!isPlaying && isVideoLoaded && !videoError && !showFallback && (
             <button
               onClick={() => setIsPlaying(true)}
-              className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-[2.5rem] transition-all hover:bg-opacity-40"
+              className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-[2.5rem] transition-all hover:bg-opacity-40 z-10"
             >
               <div className="bg-white bg-opacity-90 rounded-full p-6 shadow-lg transform hover:scale-110 transition-transform">
                 <Play className="h-12 w-12 text-blue-600 ml-1" />
@@ -384,42 +460,54 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
             {renderPhoneDemo()}
 
             {/* Video Controls */}
-            {isVideoLoaded && !videoError && (
+            {((isVideoLoaded && !videoError) || showFallback) && (
               <div className="absolute bottom-6 left-6 right-6">
                 <div className="bg-black bg-opacity-70 rounded-2xl p-4 backdrop-blur-sm">
                   {/* Progress Bar */}
-                  <div 
-                    className="bg-white bg-opacity-30 rounded-full h-2 mb-4 cursor-pointer"
-                    onClick={handleProgressClick}
-                  >
+                  {!showFallback && (
                     <div 
-                      className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                    ></div>
-                  </div>
+                      className="bg-white bg-opacity-30 rounded-full h-2 mb-4 cursor-pointer"
+                      onClick={handleProgressClick}
+                    >
+                      <div 
+                        className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
+                  )}
                   
                   {/* Control Buttons */}
                   <div className="flex items-center justify-between text-white">
                     <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => setIsPlaying(!isPlaying)}
-                        className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                        title="Play/Pause (Space)"
-                      >
-                        {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                      </button>
+                      {!showFallback && (
+                        <>
+                          <button
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                            title="Play/Pause (Space)"
+                          >
+                            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                          </button>
+                          
+                          <button
+                            onClick={() => setIsMuted(!isMuted)}
+                            className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                            title="Mute/Unmute (M)"
+                          >
+                            {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                          </button>
+                          
+                          <span className="text-sm font-medium">
+                            {formatTime(currentTime)} / {formatTime(duration)}
+                          </span>
+                        </>
+                      )}
                       
-                      <button
-                        onClick={() => setIsMuted(!isMuted)}
-                        className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                        title="Mute/Unmute (M)"
-                      >
-                        {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                      </button>
-                      
-                      <span className="text-sm font-medium">
-                        {formatTime(currentTime)} / {formatTime(duration)}
-                      </span>
+                      {showFallback && (
+                        <span className="text-sm font-medium text-blue-200">
+                          Demo video playing via YouTube
+                        </span>
+                      )}
                     </div>
                     
                     <button
@@ -434,15 +522,15 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {/* Error Message */}
-            {videoError && (
+            {/* Status Messages */}
+            {videoError && !showFallback && (
               <div className="absolute top-6 left-6 right-6">
-                <div className="bg-blue-600 text-white rounded-xl p-4 shadow-lg">
+                <div className="bg-orange-600 text-white rounded-xl p-4 shadow-lg">
                   <div className="flex items-center space-x-3">
-                    <AlertCircle className="h-5 w-5 text-blue-200" />
+                    <Loader className="h-5 w-5 text-orange-200 animate-spin" />
                     <div>
-                      <p className="font-semibold">Demo Video Loading</p>
-                      <p className="text-sm text-blue-100">Showing YouTube demo instead</p>
+                      <p className="font-semibold">Loading Demo Video</p>
+                      <p className="text-sm text-orange-100">Trying alternative sources...</p>
                     </div>
                   </div>
                 </div>
@@ -459,7 +547,7 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
                   Real Mobile App Demo
                 </h3>
                 <p className="text-lg text-gray-700 leading-relaxed mb-6">
-                  Watch how SafeYatra works on a real smartphone. This 90-second demo shows 
+                  Watch how SafeYatra works on a real smartphone. This demo shows 
                   the complete parent experience from setup to emergency response.
                 </p>
                 

@@ -4,11 +4,13 @@ import Navigation from './Navigation';
 import LoginPage from './LoginPage';
 import FeatureComparison from './FeatureComparison';
 import FAQ from './FAQ';
+import DemoModal from './DemoModal';
 
 function LandingPage() {
   const [activeDemo, setActiveDemo] = useState('tracking');
   const [activeFeature, setActiveFeature] = useState(0);
   const [showLogin, setShowLogin] = useState(false);
+  const [showDemoModal, setShowDemoModal] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -211,6 +213,12 @@ function LandingPage() {
       {/* Navigation */}
       <Navigation />
 
+      {/* Demo Modal */}
+      <DemoModal 
+        isOpen={showDemoModal} 
+        onClose={() => setShowDemoModal(false)} 
+      />
+
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white py-16 md:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -231,7 +239,10 @@ function LandingPage() {
                 >
                   Start Free Trial
                 </button>
-                <button className="border-3 border-white text-white px-8 py-4 rounded-xl text-xl font-bold hover:bg-white hover:text-blue-700 transition-all shadow-xl">
+                <button 
+                  onClick={() => setShowDemoModal(true)}
+                  className="border-3 border-white text-white px-8 py-4 rounded-xl text-xl font-bold hover:bg-white hover:text-blue-700 transition-all shadow-xl"
+                >
                   Watch Demo
                 </button>
               </div>
@@ -583,8 +594,11 @@ function LandingPage() {
             >
               Start Free Trial - All 11 Features
             </button>
-            <button className="w-full sm:w-auto border-3 border-white text-white px-10 py-5 rounded-xl text-xl font-bold hover:bg-white hover:text-orange-600 transition-all shadow-xl">
-              Schedule AI Demo
+            <button 
+              onClick={() => setShowDemoModal(true)}
+              className="w-full sm:w-auto border-3 border-white text-white px-10 py-5 rounded-xl text-xl font-bold hover:bg-white hover:text-orange-600 transition-all shadow-xl"
+            >
+              Watch Full Demo
             </button>
           </div>
           <p className="text-lg text-orange-100 mt-8 font-medium">

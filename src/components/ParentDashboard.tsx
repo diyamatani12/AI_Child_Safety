@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { 
   BarChart3, MapPin, Bell, Navigation as NavigationIcon, Zap, BookOpen, 
   Calendar, Settings, Shield, CheckCircle, Clock, 
-  Users, Phone, MessageCircle, LogOut, Menu, X
+  Users, Phone, MessageCircle, LogOut, Menu, X, AlertCircle, Loader
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { useChildData } from '../hooks/useChildData';
 import Navigation from './Navigation';
 import DashboardCard from './dashboard/DashboardCard';
 import StatCard from './dashboard/StatCard';
@@ -16,42 +17,22 @@ import EmergencyContacts from './settings/EmergencyContacts';
 
 const ParentDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { 
+    child, 
+    journeys, 
+    alerts, 
+    transportInfo, 
+    stats, 
+    isLoading, 
+    error, 
+    refreshData, 
+    markAlertAsRead 
+  } = useChildData(user?.id);
+  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Mock data
-  const quickStats = [
-    { label: 'Today\'s Journeys', value: '3', color: 'blue' as const, icon: MapPin },
-    { label: 'Safe Arrivals', value: '100%', color: 'green' as const, icon: CheckCircle },
-    { label: 'Active Alerts', value: '0', color: 'orange' as const, icon: Bell },
-    { label: 'Safety Score', value: '98%', color: 'purple' as const, icon: Shield },
-  ];
-
-  const recentAlerts = [
-    {
-      id: '1',
-      type: 'success' as const,
-      title: 'Safe Arrival',
-      message: 'Aarav arrived at school safely',
-      time: '08:45 AM',
-      location: 'Delhi Public School'
-    },
-    {
-      id: '2',
-      type: 'info' as const,
-      title: 'Journey Started',
-      message: 'Boarding Bus #DL-1PC-4567',
-      time: '08:30 AM',
-      location: 'Home Bus Stop'
-    }
-  ];
-
-  const weeklyReports = [
-    { date: 'Today', route: 'Home → School', duration: '25 min', safetyScore: 98, incidents: 0 },
-    { date: 'Yesterday', route: 'School → Home', duration: '30 min', safetyScore: 95, incidents: 0 },
-    { date: 'Dec 18', route: 'Home → School', duration: '22 min', safetyScore: 100, incidents: 0 },
-  ];
-
+  // Settings state (these would also come from database in a real app)
   const [safeZones, setSafeZones] = useState([
     {
       id: '1',
@@ -63,9 +44,9 @@ const ParentDashboard: React.FC = () => {
     },
     {
       id: '2',
-      name: 'Delhi Public School',
+      name: child?.school || 'School',
       type: 'school' as const,
-      address: 'DPS Road, Sector 30, Noida, UP',
+      address: `${child?.school || 'School'} Address`,
       radius: 150,
       isActive: true
     }
@@ -74,17 +55,10 @@ const ParentDashboard: React.FC = () => {
   const [emergencyContacts, setEmergencyContacts] = useState([
     {
       id: '1',
-      name: 'Priya Sharma',
-      relationship: 'Mother',
+      name: user?.name || 'Parent',
+      relationship: 'Parent',
       phone: '+91 98765 43210',
       isPrimary: true
-    },
-    {
-      id: '2',
-      name: 'Raj Sharma',
-      relationship: 'Father',
-      phone: '+91 98765 43211',
-      isPrimary: false
     }
   ]);
 
@@ -123,24 +97,123 @@ const ParentDashboard: React.FC = () => {
     setEmergencyContacts(emergencyContacts.filter(contact => contact.id !== id));
   };
 
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'at_school':
+        return { text: 'At School', color: 'text-green-600', bgColor: 'bg-green-100' };
+      case 'in_transit':
+        return { text: 'In Transit', color: 'text-blue-600', bgColor: 'bg-blue-100' };
+      case 'at_home':
+        return { text: 'At Home', color: 'text-purple-600', bgColor: 'bg-purple-100' };
+      default:
+        return { text: 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-100' };
+    }
+  };
+
+  const getCurrentJourney = () => {
+    return journeys.find(j => j.status === 'in_progress') || journeys[0];
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-spin" />
+          <p className="text-xl text-gray-600 font-medium">Loading your child's information...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Unable to Load Data</h2>
+          <p className="text-lg text-gray-600 mb-6">{error}</p>
+          <button
+            onClick={refreshData}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No child found
+  if (!child) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <Users className="h-16 w-16 text-gray-400 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">No Child Profile Found</h2>
+          <p className="text-lg text-gray-600 mb-6">
+            No child profile is linked to your parent account. Please contact support to set up your child's profile.
+          </p>
+          <button className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors">
+            Contact Support
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const statusDisplay = getStatusDisplay(child.currentStatus);
+  const currentJourney = getCurrentJourney();
+
+  // Quick stats based on real data
+  const quickStats = [
+    { 
+      label: 'Today\'s Journeys', 
+      value: stats.todayJourneys.toString(), 
+      color: 'blue' as const, 
+      icon: MapPin 
+    },
+    { 
+      label: 'Safe Arrivals', 
+      value: `${stats.safeArrivals}`, 
+      color: 'green' as const, 
+      icon: CheckCircle 
+    },
+    { 
+      label: 'Active Alerts', 
+      value: stats.activeAlerts.toString(), 
+      color: 'orange' as const, 
+      icon: Bell 
+    },
+    { 
+      label: 'Safety Score', 
+      value: `${stats.safetyScore}%`, 
+      color: 'purple' as const, 
+      icon: Shield 
+    },
+  ];
+
   const renderDashboard = () => (
     <div className="space-y-8">
       {/* Child Status Card */}
-      <DashboardCard title="Aarav's Current Status">
+      <DashboardCard title={`${child.name}'s Current Status`}>
         <div className="grid md:grid-cols-2 gap-8">
           <div>
             <div className="flex items-center space-x-4 mb-6">
               <img 
-                src="https://images.pexels.com/photos/1068205/pexels-photo-1068205.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=2"
-                alt="Aarav"
+                src={child.avatar}
+                alt={child.name}
                 className="w-16 h-16 rounded-full object-cover border-4 border-blue-200"
               />
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Aarav Sharma</h3>
-                <p className="text-lg text-gray-600">Age 12 • Class 7</p>
+                <h3 className="text-xl font-bold text-gray-900">{child.name}</h3>
+                <p className="text-lg text-gray-600">Age {child.age} • {child.class}</p>
                 <div className="flex items-center space-x-2 mt-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-semibold text-green-600">Online & Safe</span>
+                  <div className={`w-3 h-3 rounded-full ${child.isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                  <span className={`text-sm font-semibold ${child.isOnline ? 'text-green-600' : 'text-gray-600'}`}>
+                    {child.isOnline ? 'Online & Safe' : 'Offline'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -150,43 +223,60 @@ const ParentDashboard: React.FC = () => {
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                   <MapPin className="h-5 w-5 text-blue-600" />
                 </div>
-                <span className="text-lg text-gray-700">Currently at: Delhi Public School</span>
+                <span className="text-lg text-gray-700">Currently at: {child.currentLocation}</span>
               </div>
               <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-green-600" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${statusDisplay.bgColor}`}>
+                  <Clock className={`h-5 w-5 ${statusDisplay.color}`} />
                 </div>
-                <span className="text-lg text-gray-700">Arrived: 08:45 AM (On time)</span>
+                <span className="text-lg text-gray-700">Status: {statusDisplay.text}</span>
               </div>
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                   <Shield className="h-5 w-5 text-purple-600" />
                 </div>
-                <span className="text-lg text-gray-700">Safety Score: 98% (Excellent)</span>
+                <span className="text-lg text-gray-700">Safety Score: {child.safetyScore}% (Excellent)</span>
               </div>
             </div>
           </div>
           
           <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200">
-            <h4 className="text-xl font-bold text-gray-900 mb-4">Today's Journey</h4>
-            <div className="space-y-3">
-              <div className="flex justify-between text-lg">
-                <span className="text-gray-600 font-medium">Route:</span>
-                <span className="font-semibold">Home → School (Route 45B)</span>
+            <h4 className="text-xl font-bold text-gray-900 mb-4">
+              {currentJourney ? 'Current/Recent Journey' : 'No Recent Journeys'}
+            </h4>
+            {currentJourney ? (
+              <div className="space-y-3">
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-600 font-medium">Route:</span>
+                  <span className="font-semibold">{currentJourney.startLocation} → {currentJourney.endLocation}</span>
+                </div>
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-600 font-medium">Transport:</span>
+                  <span className="font-semibold">{currentJourney.transportType} #{currentJourney.transportId}</span>
+                </div>
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-600 font-medium">Started:</span>
+                  <span className="font-semibold">{currentJourney.startTime}</span>
+                </div>
+                {currentJourney.duration && (
+                  <div className="flex justify-between text-lg">
+                    <span className="text-gray-600 font-medium">Duration:</span>
+                    <span className="font-semibold">{currentJourney.duration}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-600 font-medium">Status:</span>
+                  <span className={`font-semibold capitalize ${
+                    currentJourney.status === 'completed' ? 'text-green-600' : 
+                    currentJourney.status === 'in_progress' ? 'text-blue-600' : 'text-orange-600'
+                  }`}>
+                    {currentJourney.status.replace('_', ' ')}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between text-lg">
-                <span className="text-gray-600 font-medium">Transport:</span>
-                <span className="font-semibold">Bus #DL-1PC-4567</span>
-              </div>
-              <div className="flex justify-between text-lg">
-                <span className="text-gray-600 font-medium">Duration:</span>
-                <span className="font-semibold">25 minutes</span>
-              </div>
-              <div className="flex justify-between text-lg">
-                <span className="text-gray-600 font-medium">Next Journey:</span>
-                <span className="font-semibold">3:30 PM (Return)</span>
-              </div>
-            </div>
+            ) : (
+              <p className="text-gray-600 text-lg">No journey data available</p>
+            )}
           </div>
         </div>
       </DashboardCard>
@@ -200,25 +290,20 @@ const ParentDashboard: React.FC = () => {
 
       {/* Map and Alerts */}
       <div className="grid lg:grid-cols-2 gap-8">
-        <MapCard
-          childName="Aarav"
-          currentLocation="Delhi Public School"
-          transportInfo={{
-            type: "Bus",
-            id: "DL-1PC-4567",
-            route: "Route 45B"
-          }}
-          nextStop={{
-            name: "School Gate",
-            eta: "Arrived"
-          }}
-          progress={100}
-        />
-        <AlertsCard alerts={recentAlerts} />
+        {transportInfo && (
+          <MapCard
+            childName={child.name}
+            currentLocation={child.currentLocation}
+            transportInfo={transportInfo}
+            nextStop={transportInfo.nextStop}
+            progress={transportInfo.progress}
+          />
+        )}
+        <AlertsCard alerts={alerts} />
       </div>
 
       {/* Reports */}
-      <ReportsCard weeklyReports={weeklyReports} />
+      <ReportsCard weeklyReports={journeys.slice(0, 7)} />
     </div>
   );
 
@@ -227,24 +312,25 @@ const ParentDashboard: React.FC = () => {
       case 'dashboard':
         return renderDashboard();
       case 'tracking':
-        return (
+        return transportInfo ? (
           <MapCard
-            childName="Aarav"
-            currentLocation="Delhi Public School"
-            transportInfo={{
-              type: "Bus",
-              id: "DL-1PC-4567",
-              route: "Route 45B"
-            }}
-            nextStop={{
-              name: "School Gate",
-              eta: "Arrived"
-            }}
-            progress={100}
+            childName={child.name}
+            currentLocation={child.currentLocation}
+            transportInfo={transportInfo}
+            nextStop={transportInfo.nextStop}
+            progress={transportInfo.progress}
           />
+        ) : (
+          <DashboardCard title="Live Tracking">
+            <div className="text-center py-12">
+              <MapPin className="h-16 w-16 text-gray-400 mx-auto mb-6" />
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">No Active Journey</h3>
+              <p className="text-xl text-gray-600">{child.name} is currently {child.currentLocation.toLowerCase()}</p>
+            </div>
+          </DashboardCard>
         );
       case 'alerts':
-        return <AlertsCard alerts={recentAlerts} />;
+        return <AlertsCard alerts={alerts} />;
       case 'geofencing':
         return (
           <GeofencingSettings
@@ -264,7 +350,7 @@ const ParentDashboard: React.FC = () => {
           />
         );
       case 'reports':
-        return <ReportsCard weeklyReports={weeklyReports} />;
+        return <ReportsCard weeklyReports={journeys.slice(0, 7)} />;
       default:
         return (
           <DashboardCard title={menuItems.find(item => item.id === activeTab)?.label || 'Feature'}>
@@ -315,7 +401,7 @@ const ParentDashboard: React.FC = () => {
               />
               <div>
                 <p className="text-lg font-bold text-gray-900">{user?.name}</p>
-                <p className="text-base text-blue-600 font-medium">Parent Account</p>
+                <p className="text-base text-blue-600 font-medium">Parent of {child.name}</p>
               </div>
             </div>
 
@@ -356,6 +442,13 @@ const ParentDashboard: React.FC = () => {
                 {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
               </h1>
             </div>
+            <button
+              onClick={refreshData}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Clock className="h-4 w-4" />
+              <span>Refresh</span>
+            </button>
           </header>
 
           {/* Content */}

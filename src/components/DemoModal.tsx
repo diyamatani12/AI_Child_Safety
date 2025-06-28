@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Play, Pause, RotateCcw, Volume2, VolumeX,
   Maximize, Minimize, Smartphone, Download, ArrowRight,
-  Shield, MapPin, Bell, Zap, CheckCircle, Star
+  Shield, MapPin, Bell, Zap, CheckCircle, Star, AlertCircle
 } from 'lucide-react';
 
 interface DemoModalProps {
@@ -19,13 +19,17 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
   const [duration, setDuration] = useState(0);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Demo video URL - Using a portrait mobile demo video
-  const demoVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-  const fallbackPosterUrl = "https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=400&h=800&dpr=2";
+  // Using a working demo video - Sintel trailer in portrait format
+  const demoVideoUrl = "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4";
+  
+  // Fallback to YouTube embed if direct video fails
+  const youtubeEmbedId = "dQw4w9WgXcQ"; // Replace with actual SafeYatra demo video ID
+  const youtubeEmbedUrl = `https://www.youtube.com/embed/${youtubeEmbedId}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1`;
 
   // Key features demonstrated in the video
   const demoFeatures = [
@@ -70,10 +74,28 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleLoadedData = () => {
+    const handleLoadStart = () => {
+      setLoadingProgress(10);
+    };
+
+    const handleProgress = () => {
+      if (video.buffered.length > 0) {
+        const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+        const duration = video.duration;
+        if (duration > 0) {
+          setLoadingProgress((bufferedEnd / duration) * 100);
+        }
+      }
+    };
+
+    const handleCanPlay = () => {
+      setLoadingProgress(100);
       setIsVideoLoaded(true);
-      setDuration(video.duration);
       setVideoError(false);
+    };
+
+    const handleLoadedData = () => {
+      setDuration(video.duration);
     };
 
     const handleTimeUpdate = () => {
@@ -86,21 +108,41 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
       setProgress(100);
     };
 
-    const handleError = () => {
+    const handleError = (e: Event) => {
+      console.error('Video error:', e);
       setVideoError(true);
+      setIsVideoLoaded(false);
+      setLoadingProgress(0);
+    };
+
+    const handleWaiting = () => {
       setIsVideoLoaded(false);
     };
 
+    const handleCanPlayThrough = () => {
+      setIsVideoLoaded(true);
+    };
+
+    video.addEventListener('loadstart', handleLoadStart);
+    video.addEventListener('progress', handleProgress);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('loadeddata', handleLoadedData);
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('error', handleError);
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplaythrough', handleCanPlayThrough);
 
     return () => {
+      video.removeEventListener('loadstart', handleLoadStart);
+      video.removeEventListener('progress', handleProgress);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('loadeddata', handleLoadedData);
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplaythrough', handleCanPlayThrough);
     };
   }, []);
 
@@ -110,7 +152,8 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
     if (!video || !isVideoLoaded) return;
 
     if (isPlaying) {
-      video.play().catch(() => {
+      video.play().catch((error) => {
+        console.error('Play failed:', error);
         setIsPlaying(false);
       });
     } else {
@@ -132,6 +175,9 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
       setIsPlaying(false);
       setProgress(0);
       setCurrentTime(0);
+      setIsVideoLoaded(false);
+      setVideoError(false);
+      setLoadingProgress(0);
       if (videoRef.current) {
         videoRef.current.currentTime = 0;
       }
@@ -150,7 +196,7 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
         case ' ':
         case 'k':
           e.preventDefault();
-          if (isVideoLoaded) {
+          if (isVideoLoaded && !videoError) {
             setIsPlaying(prev => !prev);
           }
           break;
@@ -171,7 +217,7 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [isOpen, isVideoLoaded]);
+  }, [isOpen, isVideoLoaded, videoError]);
 
   const restartVideo = () => {
     const video = videoRef.current;
@@ -210,6 +256,83 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
     video.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress((newTime / duration) * 100);
+  };
+
+  const renderPhoneDemo = () => {
+    if (videoError) {
+      return (
+        <div className="w-80 h-[600px] bg-gradient-to-br from-gray-800 to-gray-900 rounded-[3rem] p-2 shadow-2xl">
+          <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
+            {/* Phone Notch */}
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-10"></div>
+            
+            {/* YouTube Embed Fallback */}
+            <div className="w-full h-full">
+              <iframe
+                src={youtubeEmbedUrl}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                title="SafeYatra Demo Video"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-80 h-[600px] bg-gradient-to-br from-gray-800 to-gray-900 rounded-[3rem] p-2 shadow-2xl">
+        <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
+          {/* Phone Notch */}
+          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-10"></div>
+          
+          {/* Video Container */}
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            muted={isMuted}
+            playsInline
+            preload="auto"
+            crossOrigin="anonymous"
+          >
+            <source src={demoVideoUrl} type="video/mp4" />
+            <p className="text-center p-8 text-gray-600">
+              Your browser does not support the video tag.
+            </p>
+          </video>
+          
+          {/* Loading Overlay */}
+          {(!isVideoLoaded && !videoError) && (
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+              <div className="text-center text-white">
+                <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="font-semibold mb-2">Loading SafeYatra Demo</p>
+                <div className="w-48 bg-white bg-opacity-30 rounded-full h-2 mx-auto">
+                  <div 
+                    className="bg-orange-400 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${loadingProgress}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-blue-100 mt-2">{Math.round(loadingProgress)}% loaded</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Play Button Overlay */}
+          {!isPlaying && isVideoLoaded && !videoError && (
+            <button
+              onClick={() => setIsPlaying(true)}
+              className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-[2.5rem] transition-all hover:bg-opacity-40"
+            >
+              <div className="bg-white bg-opacity-90 rounded-full p-6 shadow-lg transform hover:scale-110 transition-transform">
+                <Play className="h-12 w-12 text-blue-600 ml-1" />
+              </div>
+            </button>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (!isOpen) return null;
@@ -257,155 +380,73 @@ const DemoModal: React.FC<DemoModalProps> = ({ isOpen, onClose }) => {
 
         <div className="flex flex-col lg:flex-row">
           {/* Video Section */}
-          <div className="lg:w-2/3 bg-black relative flex items-center justify-center">
-            {videoError ? (
-              // Fallback content when video fails to load
-              <div className="text-center text-white p-12">
-                <div className="w-64 h-96 mx-auto bg-gray-800 rounded-3xl border-8 border-gray-700 relative overflow-hidden shadow-2xl">
-                  {/* Phone Frame */}
-                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-16 h-1 bg-gray-600 rounded-full"></div>
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-12 h-12 bg-gray-700 rounded-full"></div>
+          <div className="lg:w-2/3 bg-gradient-to-br from-gray-900 to-black relative flex items-center justify-center p-8">
+            {renderPhoneDemo()}
+
+            {/* Video Controls */}
+            {isVideoLoaded && !videoError && (
+              <div className="absolute bottom-6 left-6 right-6">
+                <div className="bg-black bg-opacity-70 rounded-2xl p-4 backdrop-blur-sm">
+                  {/* Progress Bar */}
+                  <div 
+                    className="bg-white bg-opacity-30 rounded-full h-2 mb-4 cursor-pointer"
+                    onClick={handleProgressClick}
+                  >
+                    <div 
+                      className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
                   
-                  {/* Screen Content */}
-                  <div className="p-4 h-full bg-gradient-to-br from-blue-600 to-purple-600 mt-8 mb-16">
-                    <div className="text-center mb-6">
-                      <Shield className="h-12 w-12 text-white mx-auto mb-2" />
-                      <h3 className="text-lg font-bold text-white">SafeYatra</h3>
+                  {/* Control Buttons */}
+                  <div className="flex items-center justify-between text-white">
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => setIsPlaying(!isPlaying)}
+                        className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                        title="Play/Pause (Space)"
+                      >
+                        {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                      </button>
+                      
+                      <button
+                        onClick={() => setIsMuted(!isMuted)}
+                        className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                        title="Mute/Unmute (M)"
+                      >
+                        {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      </button>
+                      
+                      <span className="text-sm font-medium">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
                     </div>
                     
-                    <div className="space-y-4">
-                      <div className="bg-white bg-opacity-20 rounded-xl p-3">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <MapPin className="h-4 w-4 text-orange-300" />
-                          <span className="text-sm font-medium text-white">Live Tracking</span>
-                        </div>
-                        <div className="text-xs text-blue-100">Aarav is on Bus #DL-1234</div>
-                      </div>
-                      
-                      <div className="bg-white bg-opacity-20 rounded-xl p-3">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Bell className="h-4 w-4 text-green-300" />
-                          <span className="text-sm font-medium text-white">Safe Arrival</span>
-                        </div>
-                        <div className="text-xs text-blue-100">Arrived at school safely</div>
-                      </div>
-                      
-                      <div className="bg-red-500 rounded-full p-4 mx-auto w-16 h-16 flex items-center justify-center">
-                        <Zap className="h-8 w-8 text-white" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-8">
-                  <h3 className="text-xl font-bold mb-4">Demo Preview</h3>
-                  <p className="text-gray-300 mb-6">
-                    This demo shows SafeYatra running on a mobile phone with real-time tracking, 
-                    smart alerts, and emergency features.
-                  </p>
-                  <div className="text-sm text-gray-400">
-                    Video temporarily unavailable - showing interactive preview
+                    <button
+                      onClick={restartVideo}
+                      className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
+                      title="Restart (R)"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               </div>
-            ) : (
-              <>
-                {/* Mobile Phone Frame */}
-                <div className="relative">
-                  <div className="w-80 h-[600px] bg-black rounded-[3rem] p-2 shadow-2xl">
-                    <div className="w-full h-full bg-white rounded-[2.5rem] overflow-hidden relative">
-                      {/* Phone Notch */}
-                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-32 h-6 bg-black rounded-b-2xl z-10"></div>
-                      
-                      {/* Video Container */}
-                      <video
-                        ref={videoRef}
-                        className="w-full h-full object-cover"
-                        muted={isMuted}
-                        playsInline
-                        poster={fallbackPosterUrl}
-                        preload="metadata"
-                      >
-                        <source src={demoVideoUrl} type="video/mp4" />
-                        Your browser does not support the video tag.
-                      </video>
-                      
-                      {/* Loading Overlay */}
-                      {!isVideoLoaded && !videoError && (
-                        <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <p className="text-gray-600 font-medium">Loading demo video...</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* Play Button Overlay */}
-                  {!isPlaying && isVideoLoaded && (
-                    <button
-                      onClick={() => setIsPlaying(true)}
-                      className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-[3rem] transition-all hover:bg-opacity-40"
-                    >
-                      <div className="bg-white bg-opacity-90 rounded-full p-6 shadow-lg">
-                        <Play className="h-12 w-12 text-blue-600 ml-1" />
-                      </div>
-                    </button>
-                  )}
-                </div>
+            )}
 
-                {/* Video Controls */}
-                {isVideoLoaded && (
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <div className="bg-black bg-opacity-70 rounded-2xl p-4 backdrop-blur-sm">
-                      {/* Progress Bar */}
-                      <div 
-                        className="bg-white bg-opacity-30 rounded-full h-2 mb-4 cursor-pointer"
-                        onClick={handleProgressClick}
-                      >
-                        <div 
-                          className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${progress}%` }}
-                        ></div>
-                      </div>
-                      
-                      {/* Control Buttons */}
-                      <div className="flex items-center justify-between text-white">
-                        <div className="flex items-center space-x-3">
-                          <button
-                            onClick={() => setIsPlaying(!isPlaying)}
-                            className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                            title="Play/Pause (Space)"
-                          >
-                            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                          </button>
-                          
-                          <button
-                            onClick={() => setIsMuted(!isMuted)}
-                            className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                            title="Mute/Unmute (M)"
-                          >
-                            {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                          </button>
-                          
-                          <span className="text-sm font-medium">
-                            {formatTime(currentTime)} / {formatTime(duration)}
-                          </span>
-                        </div>
-                        
-                        <button
-                          onClick={restartVideo}
-                          className="bg-white bg-opacity-20 hover:bg-opacity-30 p-2 rounded-full transition-all"
-                          title="Restart (R)"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </button>
-                      </div>
+            {/* Error Message */}
+            {videoError && (
+              <div className="absolute top-6 left-6 right-6">
+                <div className="bg-blue-600 text-white rounded-xl p-4 shadow-lg">
+                  <div className="flex items-center space-x-3">
+                    <AlertCircle className="h-5 w-5 text-blue-200" />
+                    <div>
+                      <p className="font-semibold">Demo Video Loading</p>
+                      <p className="text-sm text-blue-100">Showing YouTube demo instead</p>
                     </div>
                   </div>
-                )}
-              </>
+                </div>
+              </div>
             )}
           </div>
 
